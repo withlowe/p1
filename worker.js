@@ -17,6 +17,8 @@ import { WORDS } from "./words.js";
 // Served to the browser as-is. This Worker never runs it: it holds no keys.
 import CRYPTO_SRC from "./crypto-src.js";
 import APP_SRC from "./app-src.js";
+import WORDS_SRC from "./words-src.js";
+import BUILD from "./build-src.js";
 
 const LIMITS = {
   hooks: 500,
@@ -657,11 +659,24 @@ async function api(req, env, path) {
 
 const MARK = `<svg viewBox="0 0 512 512" width="28" height="28" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="1.5" aria-hidden="true"><g transform="translate(30.72,30.72) scale(0.88)"><g transform="matrix(1.33066,0,0,1.33066,-1620.81,-474.069)"><g transform="matrix(0,-5.02704,5.02704,0,817.039,-11231.4)"><path d="M-2308.17,94.189C-2308.17,87.941 -2313.25,82.868 -2319.49,82.868L-2359.4,82.868C-2365.64,82.868 -2370.72,87.941 -2370.72,94.189L-2370.72,114.214C-2370.65,114.179 -2350.08,114.357 -2350.25,114.214C-2350.78,143.17 -2350.39,144.547 -2330.64,144.759C-2315.81,144.918 -2308.11,143.054 -2308.17,134.239L-2308.17,94.189Z" stroke-width="6.19"/></g><g transform="translate(-1070.14,550.813)"><path d="M2392,-60.611L2530,-60.611" stroke-width="22.92"/></g></g></g></svg>`;
 
-const CSS = `:root{color-scheme:light dark;--bg:#fff;--fg:#111;--dim:#666;--line:#e5e5e3;--panel:#fafaf9;--accent:#d83b01}
-@media(prefers-color-scheme:dark){:root{--bg:#161615;--fg:#eee;--dim:#999;--line:#2c2c2a;--panel:#1d1d1b}}
-*{box-sizing:border-box}body{margin:0;font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
-code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-a{color:inherit}`;
+const CSS = `:root{
+  color-scheme:light dark;
+  --paper:#fff; --ink:#0a0a0a; --dim:#6b6b6b; --rule:#e2e2df; --ground:#eeeeec;
+  --serif:"Iowan Old Style",Charter,Georgia,"Times New Roman",Times,serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,"SF Mono",monospace;
+}
+@media(prefers-color-scheme:dark){:root{--paper:#111110;--ink:#f2f2ef;--dim:#8c8c88;--rule:#2b2b28;--ground:#050505}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+     font:17px/1.5 var(--serif);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.mono{font-family:var(--mono)}
+h1,h2,h3{font-weight:700;letter-spacing:-.01em}
+button,input,select,textarea{font:inherit;color:inherit}
+`;
+
+// The mark, sized for a header.
+const HEADMARK = MARK.replace('width="28" height="28"', 'width="30" height="30"');
 
 function contactPage(cfg, origin) {
   const rec = cfg?.contact ? JSON.parse(cfg.contact) : null;
@@ -696,60 +711,128 @@ p{color:var(--dim)}
 </div>`);
 }
 
-const APP = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+const APP = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Posts</title><link rel=icon href="/icon.svg"><style>${CSS}
-body{height:100vh;display:grid;grid-template-columns:280px 1fr}
-@media(max-width:720px){body{grid-template-columns:1fr}}
-#side{border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:10px;display:flex;flex-direction:column}
-#main{display:flex;flex-direction:column;overflow:hidden}
-h1{font-size:15px;margin:6px 8px 10px;display:flex;align-items:center;gap:8px}
-.src{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer}
-.src:hover{background:var(--bg)}.src.on{background:var(--bg);box-shadow:inset 0 0 0 1px var(--line)}
-.src b{font-weight:600;font-size:13px;display:block}.src small{color:var(--dim);font-size:11px}
-.manage{border:0;background:none;color:var(--dim);padding:0 4px;font-size:16px;line-height:1;opacity:0}
-.src:hover .manage,.src.on .manage{opacity:1}
-#rules select,#rules input{padding:4px 6px;font-size:12px}
-.sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:14px 10px 6px}
-#list{overflow-y:auto;flex:1;padding:16px 20px}
-.item{border-bottom:1px solid var(--line);padding:14px 0}
-.item h3{margin:0 0 4px;font-size:14px}
-.item .meta{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim)}
-.item pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;font:13px/1.6 ui-sans-serif,system-ui,sans-serif}
-.lock{color:var(--accent)}
-#bar{border-top:1px solid var(--line);padding:10px 20px;display:flex;gap:8px;align-items:center}
-#compose{border-top:1px solid var(--line);padding:10px 20px;display:none;gap:8px;align-items:center}
-#compose.on{display:flex}
-mark{background:var(--accent);color:#fff;border-radius:3px;padding:0 2px}
-.src.hide,.item.hide{display:none}
-input,button,textarea,select{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:8px 10px}
-input,textarea{flex:1}button{cursor:pointer}button.p{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-.pill{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--dim);white-space:nowrap}
-.empty{color:var(--dim);padding:40px 0;text-align:center}
-dialog{border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--fg);max-width:34rem;width:92%;padding:20px}
-dialog h3{margin:0 0 8px}
-.k{font-family:ui-monospace,monospace;font-size:12px;background:var(--panel);padding:10px;border-radius:8px;word-break:break-all;border:1px solid var(--line)}
-.fp{font-family:ui-monospace,monospace;font-size:12px;color:var(--dim)}
-.foot{margin-top:auto;padding:10px 8px;font-size:11px;color:var(--dim);border-top:1px solid var(--line)}
-</style>
-<div id=side>
-  <h1>${MARK} Posts</h1>
-  <div id=srcs></div>
-  <div class=sec>Add</div>
-  <div style="padding:0 6px">
-    <input id=addurl placeholder="feed URL, or someone's /c" style="width:100%;margin-bottom:6px">
-    <button onclick=add() style="width:100%;margin-bottom:6px">Add</button>
-    <button onclick=mint() style="width:100%">Mint a hook</button>
-  </div>
-  <div class=foot id=me></div>
-</div>
-<div id=main>
-  <div id=list><div class=empty>Pick a source.</div></div>
-  <div id=bar><input id=filter placeholder="Filter…" autocomplete=off><span class=pill id=fcount></span></div>
-  <div id=compose></div>
-</div>
-<dialog id=dlg><div id=dlgbody></div><p style="text-align:right;margin:16px 0 0"><button onclick="dlg.close()">Close</button></p></dialog>
 
-<script type=module src="/app.js"></script>`;
+body{min-height:100vh;padding:22px;display:flex}
+#frame{flex:1;display:grid;grid-template-columns:270px 1fr;
+  background:var(--paper);border:3px solid var(--ink);border-radius:26px;overflow:hidden;min-height:0}
+
+/* ---- sidebar ---- */
+#side{display:flex;flex-direction:column;border-right:1px solid var(--rule);min-height:0}
+#side header,#mainhead{display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid var(--rule);flex:0 0 auto}
+#side header h1{margin:0;font-size:26px}
+#side header .tools{display:flex;align-items:center;gap:10px}
+#plus{border:1.5px solid var(--rule);background:none;border-radius:9px;width:32px;height:32px;
+  font-size:21px;line-height:1;cursor:pointer;color:var(--dim);padding:0}
+#plus:hover{border-color:var(--ink);color:var(--ink)}
+#settings{border:0;background:none;padding:0;cursor:pointer;display:flex;color:var(--ink)}
+#settings:hover{opacity:.65}
+#back{display:none;border:0;background:none;font-size:22px;line-height:1;padding:0 10px 0 0;
+  cursor:pointer;color:var(--dim)}
+#side header svg,#mainhead svg{flex:0 0 auto}
+#srcs{overflow-y:auto;flex:1;min-height:0}
+.src{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 20px;border-bottom:1px solid var(--rule);cursor:pointer;min-height:46px}
+.src:hover{background:var(--ground)}
+.src.on{background:var(--ground)}
+.src b{display:block;font-weight:400;font-size:17px}
+.src.on b{font-weight:700}
+.src small{display:block;color:var(--dim);font-size:10.5px;font-family:var(--mono);
+  letter-spacing:.04em;margin-top:1px}
+.sec{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--dim);padding:16px 20px 6px}
+.pill{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.manage{border:0;background:none;color:var(--dim);padding:0 2px;font-size:18px;line-height:1;opacity:0;cursor:pointer}
+.src:hover .manage,.src.on .manage{opacity:1}
+
+/* ---- the filter, at the foot of the library ---- */
+#foot{flex:0 0 auto;padding:12px 16px 16px;border-top:1px solid var(--rule)}
+#foot .actions{display:flex;gap:8px;margin:0 0 10px}
+#foot .actions button{flex:1;border:1.5px solid var(--rule);background:none;border-radius:9px;
+  padding:8px 10px;font-size:14px;cursor:pointer}
+#foot .actions button:hover{border-color:var(--ink)}
+#filterwrap{display:flex;align-items:center;gap:8px;border:1.5px solid var(--rule);
+  border-radius:9px;padding:9px 12px;background:var(--paper)}
+#filterwrap:focus-within{border-color:var(--ink)}
+#filter{flex:1;border:0;outline:0;background:none;font-size:15px}
+#filter::placeholder{color:var(--dim)}
+#fcount{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap}
+
+/* ---- reading ---- */
+#main{display:flex;flex-direction:column;min-height:0}
+#mainhead{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.04em}
+#list{overflow-y:auto;flex:1;padding:6px 26px 26px;min-height:0}
+.item{padding:18px 0;border-bottom:1px solid var(--rule);max-width:34rem}
+.item h3{margin:0 0 3px;font-size:18px}
+.item .meta{font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.03em}
+.item pre{white-space:pre-wrap;word-break:break-word;margin:9px 0 0;font:17px/1.5 var(--serif)}
+.item .meta button{font-family:var(--mono);font-size:10px;border:1px solid var(--rule);
+  background:none;border-radius:5px;padding:1px 6px;margin-left:5px;cursor:pointer}
+mark{background:var(--ink);color:var(--paper);border-radius:2px;padding:0 2px}
+.src.hide,.item.hide{display:none}
+.lock{font-family:var(--mono);font-size:10px}
+.empty{color:var(--dim);padding:48px 0;font-size:15px}
+
+/* ---- writing ---- */
+#compose{border-top:1px solid var(--rule);padding:12px 26px;display:none;gap:8px;align-items:center;flex:0 0 auto}
+#compose.on{display:flex}
+#compose input,#compose textarea{flex:1;border:1.5px solid var(--rule);border-radius:9px;
+  padding:8px 11px;background:none;font-size:15px}
+#compose button{border:1.5px solid var(--ink);background:var(--ink);color:var(--paper);
+  border-radius:9px;padding:8px 14px;cursor:pointer}
+
+/* ---- dialogs ---- */
+dialog{border:3px solid var(--ink);border-radius:20px;background:var(--paper);color:var(--ink);
+  max-width:34rem;width:92%;padding:26px;font-size:16px}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog h3{margin:0 0 10px;font-size:22px}
+dialog button{border:1.5px solid var(--rule);background:none;border-radius:9px;
+  padding:7px 13px;cursor:pointer;font-size:14px}
+dialog button:hover{border-color:var(--ink)}
+dialog input,dialog select{border:1.5px solid var(--rule);border-radius:8px;padding:7px 10px;background:none}
+.k{font-family:var(--mono);font-size:12.5px;background:var(--ground);padding:11px 13px;
+  border-radius:9px;word-break:break-all;line-height:1.5}
+.fp{font-family:var(--mono);font-size:12px;color:var(--dim)}
+#rules select,#rules input{font-size:13px;padding:5px 7px}
+
+@media(max-width:760px){
+  body{padding:10px}
+  #frame{grid-template-columns:1fr}
+  #side{border-right:0}
+  body.reading #side{display:none}
+  body:not(.reading) #main{display:none}
+  #back{display:block}
+}
+</style>
+
+<div id=frame>
+  <div id=side>
+    <header>
+      <h1>Posts</h1>
+      <div class=tools>
+        <button id=plus title="Add a feed or a pass" aria-label="Add">+</button>
+        <button id=settings title="Settings" aria-label="Settings">${HEADMARK}</button>
+      </div>
+    </header>
+    <div id=srcs></div>
+    <div id=foot>
+      <div class=actions>
+        <button onclick=add()>Subscribe</button>
+        <button onclick=mint()>Create Pass</button>
+      </div>
+      <div id=filterwrap><input id=filter placeholder="Filter Library" autocomplete=off><span id=fcount></span></div>
+    </div>
+  </div>
+  <div id=main>
+    <div id=mainhead><button id=back aria-label="Back to library">‹</button><span id=feedname></span></div>
+    <div id=list><div class=empty>Pick a feed.</div></div>
+    <div id=compose></div>
+  </div>
+</div>
+<dialog id=dlg><div id=dlgbody></div><p style="text-align:right;margin:20px 0 0"><button id=dlgclose onclick="dlg.close()">Close</button></p></dialog>
+<script type=module src="/app.js?v=${BUILD}"></script>`;
 
 /* ---------- router ---------- */
 
@@ -768,8 +851,10 @@ export default {
       return receive(req, env, ctx, hook[1], ip);
     }
 
-    if (path === "/crypto.js" || path === "/app.js")
-      return new Response(path === "/app.js" ? APP_SRC : CRYPTO_SRC, {
+    // Versioned by content hash, so a deploy is never served a stale module.
+    if (path === "/crypto.js" || path === "/app.js" || path === "/words.js")
+      return new Response(
+        path === "/app.js" ? APP_SRC : path === "/words.js" ? WORDS_SRC : CRYPTO_SRC, {
         headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=3600" },
       });
 

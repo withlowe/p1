@@ -42,7 +42,8 @@ ok("box pub is 32 bytes", ub64(alice.boxPub).length === 32);
 ok("two identities differ", alice.signPub !== bob.signPub);
 
 const fp = await fingerprint(alice.signPub);
-ok("fingerprint is groups of four", /^([0-9A-F]{4} ){3}[0-9A-F]{4}$/.test(fp), fp);
+ok("fingerprint is six words", /^([a-z]+ ){5}[a-z]+$/.test(fp), fp);
+ok("six words is 77.5 bits — enough for an offline attack", Math.abs(6 * Math.log2(7776) - 77.5) < 0.2);
 ok("fingerprint is stable", fp === (await fingerprint(alice.signPub)));
 ok("fingerprint differs per key", fp !== (await fingerprint(bob.signPub)));
 

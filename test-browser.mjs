@@ -63,7 +63,7 @@ await page.goto(origin);
 await page.waitForSelector("#dlgbody .k", { timeout: 15000 });
 const secret = (await page.textContent("#dlgbody .k")).trim();
 t.ok("the owner secret is shown once", secret.length >= 32);
-await page.click("dialog button");
+await page.click("#dlgclose");
 
 t.ok("keys were generated in the browser", await page.evaluate(async () => {
   const d = await new Promise((ok) => { const r = indexedDB.open("posts", 1); r.onsuccess = () => ok(r.result); });
@@ -73,9 +73,14 @@ t.ok("keys were generated in the browser", await page.evaluate(async () => {
   });
 }));
 
-await page.waitForFunction(() => document.querySelector("#me")?.textContent.includes("fingerprint"), null, { timeout: 15000 });
-const fp = (await page.textContent("#me")).match(/([0-9A-F]{4} ){3}[0-9A-F]{4}/);
-t.ok("the fingerprint is shown", !!fp, await page.textContent("#me"));
+await page.waitForFunction(() => document.body.dataset.ready === "1", null, { timeout: 15000 });
+await page.click("#settings");
+await page.waitForSelector("#myfp", { timeout: 10000 });
+const fpText = (await page.textContent("#myfp")).trim();
+const fp = [fpText];
+t.ok("the key is six words, in settings", /^([a-z]+ ){5}[a-z]+$/.test(fpText), fpText);
+t.ok("settings links to the contact page", (await page.getAttribute("#contactlink", "href")) === "/c");
+await page.click("#dlgclose");
 
 /* ---- the contact record was signed here and published ---- */
 
@@ -141,10 +146,10 @@ await page.fill("#filter", "");
 console.log("\nmanaging a hook");
 {
   page.once("dialog", (d) => d.accept("newsletters"));
-  await page.click("button:has-text('Mint a hook')");
+  await page.click("button:has-text('Create Pass')");
   await page.waitForSelector("#dlgbody .k", { timeout: 10000 });
   const nl = (await page.textContent("#dlgbody .k")).trim();
-  await page.click("dialog button");
+  await page.click("#dlgclose");
   await page.waitForTimeout(200);
 
   // The manage control sits on the source, not behind a menu somewhere else.
@@ -196,10 +201,10 @@ console.log("\nmanaging a hook");
 console.log("\nall feeds");
 {
   page.once("dialog", (d) => d.accept("second source"));
-  await page.click("button:has-text('Mint a hook')");
+  await page.click("button:has-text('Create Pass')");
   await page.waitForSelector("#dlgbody .k", { timeout: 10000 });
   const other = (await page.textContent("#dlgbody .k")).trim();
-  await page.click("dialog button");
+  await page.click("#dlgclose");
   await fetch(other, { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ subject: "Elsewhere", text: "a different source entirely" }) });
 
@@ -220,9 +225,9 @@ console.log("\nsettings");
 {
   await page.click("#settings");
   await page.waitForSelector("#bdo", { timeout: 10000 });
-  t.ok("the fingerprint is offered for checking", (await page.textContent("#dlgbody .k")).trim() === fp[0]);
+  t.ok("the key is offered for checking", (await page.textContent("#myfp")).trim() === fp[0]);
 
-  const before = await page.evaluate(() => document.querySelector("#me").textContent);
+  const before = fp[0];
 
   const rotated = await page.evaluate(async () => {
     const C = await import("/crypto.js");
@@ -253,20 +258,22 @@ console.log("\nsettings");
   t.ok("a contact who trusted the old key follows it", after.followed);
   t.ok("a stranger accepts the new record too", after.strangerOk);
   t.ok("the record carries the rotation", after.hasRotation);
-  await page.click("dialog button");
-  t.ok("the sidebar shows the new fingerprint",
-    (await page.evaluate(() => document.querySelector("#me").textContent)) !== before);
+  await page.click("#dlgclose");
+  await page.click("#settings");
+  await page.waitForSelector("#myfp", { timeout: 10000 });
+  t.ok("settings shows the new key", (await page.textContent("#myfp")).trim() !== before);
+  await page.click("#dlgclose");
 }
 
 /* ---- minting a hook ---- */
 
 console.log("\nminting");
 page.once("dialog", (d) => d.accept("CI alerts"));
-await page.click("button:has-text('Mint a hook')");
+await page.click("button:has-text('Create Pass')");
 await page.waitForSelector("#dlgbody .k", { timeout: 10000 });
 const minted = (await page.textContent("#dlgbody .k")).trim();
 t.ok("a three-word hook is offered", /\/h\/[a-z]+-[a-z]+-[a-z]+$/.test(minted), minted);
-await page.click("dialog button");
+await page.click("#dlgclose");
 
 const posted = await fetch(minted, { method: "POST", body: "build 999 green" });
 t.ok("it accepts", posted.status === 202);

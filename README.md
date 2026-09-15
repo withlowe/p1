@@ -4,7 +4,7 @@ A reader where everything is a feed, and some feeds are private.
 
 Subscribe to public feeds and read them. Give every sender its own **hook** — three random words — and delete it when you're done. One Worker on your own Cloudflare account.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/withlowe/posts)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR-USERNAME/posts)
 
 ```text
 posts.example/                         nothing. accepts nothing, reveals nothing.
@@ -30,7 +30,7 @@ Rotation has a tail. A retired hook still accepts for ninety days but flags arri
 posts/
 ├── worker.js        the relay and the app shell
 ├── app.js           the client — sidebar, reading, filtering, composing
-├── crypto.js        keys, signing, sealing
+├── crypto.js        keys, signing, sealing, fingerprints
 ├── *-src.js         generated: the browser files as strings, so the Worker
 │                    can serve them without ever running them
 ├── words.js         the EFF large wordlist (7,776 words, CC BY 3.0)
@@ -38,7 +38,8 @@ posts/
 ├── wrangler.toml    bindings and cron
 ├── package.json     deploy and test scripts
 ├── .gitignore       keeps node_modules out of the repository
-├── tools/bundle.mjs regenerates crypto-src.js
+├── tools/           bundle.mjs regenerates the -src.js files
+│                    check-config.mjs catches unset bindings before deploy
 ├── test.mjs         the relay
 ├── test-crypto.mjs  the cryptography
 ├── test-e2e.mjs     two instances, two hosts, the whole flow
@@ -46,7 +47,7 @@ posts/
 └── test-stub.mjs    in-memory KV and D1
 ```
 
-`npm test` runs all four — 241 checks, none of which need a Cloudflare account.
+`npm test` runs all four — 243 checks, none of which need a Cloudflare account.
 
 `wrangler` is the only dependency, because Cloudflare's builder installs from `package.json` and then runs the deploy script. Playwright is deliberately **not** one — a deploy would download a browser every time. Add it when you want the browser suite:
 
@@ -87,6 +88,8 @@ If Cloudflare names the copied repository something else — `posts` taken means
 **A4. One setting.** Workers & Pages → your worker → Settings → **Observability → Logs** → off, and leave Logpush off. Hook and feed URLs contain keys, and logs would capture them.
 
 Then skip to **Check it works**. If the deploy fails, the build log is under the worker's Deployments tab; the usual causes are a file missing from the repository and an edited deploy script.
+
+**Only the button provisions.** Once the repository exists, pushing to it triggers a rebuild that uses whatever `wrangler.toml` says — it does not create anything. So if a deploy ever fails on the placeholder ids, do **B3** and **B4** below once and commit the real ones.
 
 ### Route B — the command line
 
@@ -214,6 +217,15 @@ Everything under `/api` needs `Authorization: Bearer <owner secret>`.
 
 **The page loads but nothing appears in the sidebar** — the browser script threw. Open the console. `npm test` runs that script in real Chromium and would normally catch it before a deploy.
 
+**`Invalid property: databaseId => Invalid uuid [code: 7400]`**, or a log showing `REPLACE_WITH_YOUR_D1_ID` — `wrangler.toml` still has the placeholders, so the KV namespace and D1 database were never created. This happens when you push to an existing repository: only the deploy button provisions resources, and a plain push just rebuilds. Create them once and commit the ids:
+
+```
+npx wrangler kv namespace create POSTS
+npx wrangler d1 create posts
+```
+
+`npm run check` tells you this before wrangler gets a chance to, and the deploy script runs it for you.
+
 **`sh: 1: wrangler: not found`** in the build log — `wrangler` is missing from `devDependencies`. The builder installs only what `package.json` asks for, and a globally installed wrangler on your own machine is not there. Check the `devDependencies` block is intact and push again.
 
 **`reached the Workers Free limit of 5 cron triggers`** — the worker itself deployed; only the schedule didn't register. The limit is per account, so old workers you have stopped using are still holding theirs. Delete them under Workers & Pages, then retry.
@@ -299,6 +311,8 @@ Hover a private source and the ⋯ opens everything that hook can do:
 Settings, in the sidebar footer, is where the account actually lives.
 
 **Back up** wraps your private keys under a passphrase (PBKDF2-SHA256, 600,000 iterations) before anything leaves the device, and downloads the result. Lose the keys with no backup and the account is gone — nothing on any server can bring it back, by design.
+
+A fingerprint is **six words**, not three. A hook is guessed online against a throttled endpoint, so 38.8 bits is ample. A fingerprint is attacked offline — the attacker generates keys on their own hardware until one matches, at no cost and no limit — so three words falls in under a day on a cluster and four in about six years. Six is 77.5 bits, and reads down a phone in one breath.
 
 **Rotate** publishes a new key in a record signed by the new key, carrying a rotation attested by the old one. A contact who already trusts the old key follows it automatically; anyone who does not have it sees only the new key; and an attacker cannot claim your contacts, because they cannot produce the old key's signature. Messages signed before the rotation still verify.
 

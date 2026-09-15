@@ -134,7 +134,7 @@ ok("no record yet → 410", (await call(e, "/c/contact.json")).status === 410);
 const record = JSON.stringify({
   hook: "https://posts.test/h/" + rot.replacement,
   key: "ed25519-pub",
-  fingerprint: "A1C4 7B92 0D11 8F35",
+  fingerprint: "bonding untouched untrue plywood overact reaction",
   issued: new Date().toISOString(),
   signature: "sig",
 });
@@ -144,7 +144,8 @@ ok(
 );
 const served = await call(e, "/c/contact.json");
 ok("served verbatim", (await served.text()) === record);
-ok("contact page renders", (await (await call(e, "/c")).text()).includes("A1C4 7B92"));
+ok("contact page renders", (await (await call(e, "/c")).text()).includes("bonding untouched"));
+ok("the wordlist is served to the browser", (await call(e, "/words.js")).status === 200);
 ok(
   "publishing needs the secret",
   (await call(e, "/api/contact", { method: "PUT", body: record })).status === 401
@@ -187,13 +188,14 @@ console.log("\nbrowser half");
   ok("contact record is readable cross-origin", cr.headers.get("access-control-allow-origin") === "*");
 
   const app = await (await call(e, "/")).text();
-  ok("app is loaded as a module, not inlined", app.includes('<script type=module src="/app.js">'));
+  ok("app is loaded as a module, not inlined", /<script type=module src="\/app\.js\?v=[0-9a-f]{10}">/.test(app));
   ok("no inline script to mangle", !/<script(?![^>]*src=)/.test(app));
 
   const aj = await call(e, "/app.js");
   ok("app.js is served", aj.status === 200);
   const appSrc = await aj.text();
-  ok("it imports the crypto module", appSrc.includes("from '/crypto.js'"));
+  ok("it imports the crypto module", appSrc.includes("'./crypto.js'"));
+  ok("modules carry the build id, so a deploy is never half-old", appSrc.includes("searchParams.get('v')"));
   ok("its regexes survived the round trip", appSrc.includes("split(/\\s+/)"));
 
   const icon = await call(e, "/favicon.ico");

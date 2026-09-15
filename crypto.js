@@ -19,6 +19,10 @@
 //     └── conversation key   per conversation, certified by the account key
 //           └── hook         the URL. not a key at all.
 
+const { WORDS } = await import(
+  new URL("./words.js" + (new URL(import.meta.url).search || ""), import.meta.url).href
+);
+
 const S = crypto.subtle;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -73,15 +77,26 @@ export async function newKeys() {
 const importSignPub = (raw) => S.importKey("raw", ub64(raw), "Ed25519", true, ["verify"]);
 const importBoxPub = (raw) => S.importKey("raw", ub64(raw), "X25519", true, []);
 
-/** Human-comparable fingerprint of a signing public key. */
+/**
+ * Human-comparable fingerprint of a signing public key: six words you can
+ * read down a phone.
+ *
+ * Six, not three. A hook is guessed ONLINE against a throttled endpoint, so
+ * 38.8 bits is plenty. A fingerprint is attacked OFFLINE — the attacker
+ * generates keys on their own hardware until one matches, at no cost and no
+ * limit — so three words falls in under a day on a cluster, and four in six
+ * years. Six is 77.5 bits: longer-lived than the keys it names.
+ */
+const FP_WORDS = 6;
+
 export async function fingerprint(signPubB64) {
   const h = new Uint8Array(await S.digest("SHA-256", ub64(signPubB64)));
-  return [...h.slice(0, 8)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .toUpperCase()
-    .match(/.{4}/g)
-    .join(" ");
+  const out = [];
+  for (let i = 0; i < FP_WORDS; i++) {
+    const v = (h[i * 4] << 24 >>> 0) + (h[i * 4 + 1] << 16) + (h[i * 4 + 2] << 8) + h[i * 4 + 3];
+    out.push(WORDS[v % WORDS.length]);
+  }
+  return out.join(" ");
 }
 
 /* ---------- signing ---------- */

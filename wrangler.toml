@@ -1,15 +1,15 @@
-name = "p1"
+name = "posts"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
 [[kv_namespaces]]
 binding = "POSTS"
-id = "835456da1ff84f3587b18db47fcee256"
+id = "REPLACE_WITH_YOUR_KV_ID"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "p1"
-database_id = "2897f673-1993-46dc-b5dd-b246cb8dc3c4"
+database_name = "posts"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
 
 [triggers]
 crons = ["0 * * * *"]

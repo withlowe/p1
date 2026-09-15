@@ -1,5 +1,8 @@
 // Posts — the client. Served to the browser; never run in the Worker.
-import * as C from '/crypto.js';
+// The build id rides on the URL this module was loaded with, so every module
+// in the graph is versioned together and a deploy can never mix old and new.
+const V = new URL(import.meta.url).searchParams.get('v') || '';
+const C = await import(new URL('./crypto.js' + (V ? '?v=' + V : ''), import.meta.url).href);
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -32,8 +35,8 @@ async function boot(){
 
   await refresh();
   await publishContact();
+  document.body.dataset.ready='1';
 
-  await showMe();
 }
 
 /* ---- publish the signed contact record ---- */
@@ -48,15 +51,19 @@ async function publishContact(){
 async function refresh(){
   STATE=await api('/api/state');
   const feedOf=id=>STATE.feeds.find(f=>f.id===id)||{name:'?'};
-  const row=(f,sub,hook)=>'<div class="src'+(FEED===f.id?' on':'')+'" data-f="'+f.id+'">'+
-    '<div><b>'+esc(f.name)+'</b><small>'+esc(sub)+(f.arrive==='daily'?' · daily':'')+'</small></div>'+
-    (hook?'<button class=manage data-h="'+esc(hook)+'" title="Manage">⋯</button>':'<span class=pill>'+(f.n||0)+'</span>')+
-    '</div>';
+  const row=(f,sub,hook)=>{
+    const note=[sub&&sub!==f.name?sub:'', f.arrive==='daily'?'daily':''].filter(Boolean).join(' · ');
+    return '<div class="src'+(FEED===f.id?' on':'')+'" data-f="'+f.id+'">'+
+      '<div><b>'+esc(f.name)+'</b>'+(note?'<small>'+esc(note)+'</small>':'')+'</div>'+
+      (hook?'<button class=manage data-h="'+esc(hook)+'" title="Manage">⋯</button>'
+           :(f.n?'<span class=pill>'+f.n+'</span>':''))+
+      '</div>';
+  };
   const live=STATE.hooks.filter(h=>h.status!=='dead');
   $('#srcs').innerHTML=
-    '<div class="src'+(FEED==='*'?' on':'')+'" data-f="*"><div><b>All</b><small>everything, newest first</small></div></div>'+
+    '<div class="src'+(FEED==='*'?' on':'')+'" data-f="*"><div><b>All</b></div></div>'+
     '<div class=sec>Private</div>'+live.map(h=>row(feedOf(h.feed),
-        h.status==='retired'?'retiring':(h.kind==='public'?'public hook':h.label||'hook'), h.hook)).join('')+
+        h.status==='retired'?'retiring':(h.kind==='public'?'public hook':''), h.hook)).join('')+
     '<div class=sec>Subscribed</div>'+(STATE.sources.map(s=>row(feedOf(s.feed),'public feed')).join('')||'<div class=src><small style="padding:0 4px">nothing yet</small></div>')+
     (Object.keys(CONTACTS).length?'<div class=sec>People</div>'+Object.entries(CONTACTS).map(([k,c])=>'<div class=src data-c="'+esc(k)+'"><div><b>'+esc(c.petname)+'</b><small>'+esc(c.fingerprint)+'</small></div></div>').join(''):'');
   $('#srcs').querySelectorAll('[data-f]').forEach(el=>el.onclick=()=>openFeed(el.dataset.f));
@@ -149,17 +156,18 @@ async function manage(hookWords){
 }
 
 /* ---- settings: the keys are the account, so this is where they live ---- */
-async function showMe(){
-  $('#me').innerHTML='your fingerprint<br><span class=fp>'+esc(await C.fingerprint(ID.signPub))+'</span><br>'+
-    '<a href="/c" target="_blank">contact page →</a> · <a href="#" id=settings>settings</a>';
-  $('#settings').onclick=e=>{e.preventDefault();openSettings()};
-}
+
 
 async function openSettings(){
   const fp=await C.fingerprint(ID.signPub);
+  const pub=STATE.hooks.find(h=>h.kind==='public'&&h.status==='active');
   show('<h3>Settings</h3>'+
-    '<p>Your fingerprint. Read it to someone through another channel to check they have the right you.</p>'+
-    '<div class=k>'+esc(fp)+'</div>'+
+    '<p><b>Your key</b><br><span style="color:var(--dim);font-size:.85rem">'+
+    'Six words that stand for your key. Read them to someone through another channel to check they have the right you.</span></p>'+
+    '<div class=k id=myfp>'+esc(fp)+'</div>'+
+    '<p style="margin-top:1.2rem"><b>Your contact page</b><br><span style="color:var(--dim);font-size:.85rem">'+
+    'Public, and it accepts nothing. Give people the link; the hook it carries can change without telling anyone.</span></p>'+
+    '<p><a href="/c" target="_blank" id=contactlink>'+esc(location.origin)+'/c →</a></p>'+
     '<p style="margin-top:1.4rem"><b>Back up your keys</b><br><span style="color:var(--dim);font-size:.85rem">'+
     'Wrapped under a passphrase before it leaves this device. Lose the keys and the account is gone — nothing on any server can bring it back.</span></p>'+
     '<p><input id=bpass type=password placeholder="passphrase" style="width:60%"> <button id=bdo>Download</button></p>'+
@@ -181,7 +189,7 @@ async function openSettings(){
     const f=$('#rfile').files[0]; if(!f) return alert('Choose a backup file.');
     try{
       const restored=await C.restore(JSON.parse(await f.text()), $('#rpass').value);
-      ID=restored; await put('identity',ID); await publishContact(); await showMe();
+      ID=restored; await put('identity',ID); await publishContact();
       dlg.close();
     }catch(e){ alert('Could not restore: '+e.message) }
   };
@@ -192,7 +200,7 @@ async function openSettings(){
     const pub=STATE.hooks.find(h=>h.kind==='public'&&h.status==='active');
     const rec=await C.rotateContact(location.origin+'/h/'+pub.hook, next, ID);
     await fetch('/api/contact',{method:'PUT',headers:{authorization:'Bearer '+TOKEN},body:JSON.stringify(rec)});
-    ID=next; await put('identity',ID); await showMe();
+    ID=next; await put('identity',ID);
     dlg.close();
     show('<h3>Rotated</h3><p>Your new fingerprint:</p><div class=k>'+esc(await C.fingerprint(ID.signPub))+'</div>'+
          '<p style="font-size:.85rem;color:var(--dim)">Old messages still verify against the old key. New ones use this.</p>');
@@ -291,6 +299,9 @@ async function postTo(contact, envelope){
 /* ---- reading, decrypting as we go ---- */
 async function openFeed(id){
   FEED=id; await refresh(); $('#compose').className='';
+  const f=STATE.feeds.find(x=>x.id===id);
+  $('#feedname').textContent = id==='*' ? 'All' : (f?.name||'');
+  document.body.classList.add('reading');
   const r=await api('/api/items?feed='+id);
   if(!r.items.length){ $('#list').innerHTML='<div class=empty>Nothing here yet.</div>'; return }
   const out=[], rows=[];
@@ -367,8 +378,7 @@ async function adoptGrant(theirKey, hookUrl){
 
 /* ---- adding: a feed URL, or someone's contact page ---- */
 async function add(){
-  const v=$('#addurl').value.trim(); if(!v) return;
-  $('#addurl').value='';
+  const v=(prompt("Feed URL, or someone's contact page")||'').trim(); if(!v) return;
   const guess=v.replace(/\/$/,'')+(/contact\.json$/.test(v)?'':'/contact.json');
   try{
     const rec=await fetch(guess).then(r=>r.ok?r.json():null);
@@ -391,6 +401,8 @@ async function add(){
 /* ---- writing to a contact ---- */
 function composeTo(key){
   const c=CONTACTS[key]; FEED=null;
+  $('#feedname').textContent='Writing to '+c.petname;
+  document.body.classList.add('reading');
   $('#list').innerHTML='<div class=empty>Writing to '+esc(c.petname)+'.<br><span class=fp>'+esc(c.fingerprint)+'</span></div>';
   $('#compose').className='on';
   $('#compose').innerHTML='<input id=subj placeholder="subject" style="max-width:10rem"><textarea id=msg rows=1 placeholder="message"></textarea><input type=file id=file style="flex:0 0 auto;max-width:9rem"><button class=p id=send>Send</button>';
@@ -419,13 +431,27 @@ function composeTo(key){
 
 /* ---- hooks ---- */
 async function mint(){
-  const label=prompt('What is this hook for?'); if(!label) return;
+  const label=prompt('What is this pass for?'); if(!label) return;
   const r=await api('/api/hooks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({label})});
-  show('<h3>'+esc(label)+'</h3><p>Give this to exactly one sender. Delete it and they are gone for good.</p><div class=k>'+esc(r.url)+'</div>');
+  show('<h3>'+esc(label)+'</h3><p>Give this pass to exactly one sender. Delete it and they are gone for good.</p><div class=k>'+esc(r.url)+'</div>');
   await refresh();
 }
 
+/* ---- the + : one place to add anything ---- */
+function addAnything(){
+  show('<h3>Add</h3>'+
+    '<p style="color:var(--dim);font-size:.9rem">A feed you pull, or a pass you hand out.</p>'+
+    '<p style="display:flex;gap:10px;margin-top:1.2rem">'+
+      '<button id=asub style="flex:1;padding:12px">Subscribe to a feed</button>'+
+      '<button id=apass style="flex:1;padding:12px">Create Pass</button></p>');
+  $('#asub').onclick=()=>{dlg.close();add()};
+  $('#apass').onclick=()=>{dlg.close();mint()};
+}
+
+$('#plus').onclick=addAnything;
+$('#settings').onclick=()=>{ if(ID) openSettings() };
+$('#back').onclick=()=>document.body.classList.remove('reading');
 $('#filter').addEventListener('input',applyFilter);
 $('#filter').addEventListener('keydown',e=>{ if(e.key==='Escape'){ e.target.value=''; applyFilter() } });
-window.add=add; window.mint=mint; window.manage=manage;
+window.add=add; window.mint=mint; window.manage=manage; window.addAnything=addAnything;
 boot();
